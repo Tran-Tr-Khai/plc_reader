@@ -1,0 +1,22 @@
+# LS PLC reader configuration.
+# Keep the Ethernet card connected to the PLC on the PLC subnet.
+
+plc_ip: 100.100.100.1
+plc_port: 2004
+plc_type: XGI
+machine_id: Tenter 1
+
+read_interval_seconds: 15
+reconnect_interval_seconds: 30
+
+# Upload to the API running on this machine's Wi-Fi address.
+upload_url: http://192.168.100.10:5001/tenter
+# Used only to flush queued payloads after the backend supports batch ingest.
+batch_url: http://192.168.100.10:5001/tenter-batch
+upload_token:
+upload_timeout_seconds: 5
+outbox_path: plc_reader/data/plc-outbox.jsonl
+batch_size: 100
+max_outbox_bytes: 524288000
+
+log_level: INFO
