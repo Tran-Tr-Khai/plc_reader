@@ -4,7 +4,7 @@
 plc_ip: 100.100.100.1
 plc_port: 2004
 plc_type: XGI
-machine_id: Tenter 1
+machine_id: plc-mini-test
 
 read_interval_seconds: 15
 reconnect_interval_seconds: 30
