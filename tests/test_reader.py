@@ -39,6 +39,17 @@ class _ResettingClient:
         self.closed = True
 
 
+class _SuccessfulClient:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def read(self, address: str, data_type: str) -> int:
+        return 42
+
+    def close(self) -> None:
+        self.closed = True
+
+
 class ReaderTests(unittest.TestCase):
     def test_pyxgt_close_closes_the_underlying_socket(self) -> None:
         client = object.__new__(PyXgtClient)
@@ -65,6 +76,19 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(list(snapshot.errors), ["connection"])
         self.assertTrue(client.closed)
         self.assertEqual(len(captured.records), 1)
+
+    def test_per_cycle_mode_closes_the_socket_after_a_complete_scan(self) -> None:
+        client = _SuccessfulClient()
+        reader = PlcReader(
+            Settings(plc_connection_mode="per_cycle"),
+            groups={"group": {"tag": "M1"}},
+            client_factory=lambda: client,
+        )
+
+        snapshot = reader.read_once()
+
+        self.assertTrue(snapshot.is_complete)
+        self.assertTrue(client.closed)
 
     def test_relative_paths_are_resolved_from_config_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

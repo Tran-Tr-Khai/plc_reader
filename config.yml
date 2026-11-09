@@ -9,6 +9,8 @@ machine_id: tenter_1
 read_interval_seconds: 15
 reconnect_interval_seconds: 30
 plc_socket_timeout_seconds: 5
+# Close the PLC socket after each successful scan to avoid idle timeouts.
+plc_connection_mode: per_cycle
 
 # Upload to the API running on this machine's Wi-Fi address.
 upload_url: http://192.168.100.10:5001/tenter

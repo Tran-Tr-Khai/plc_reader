@@ -60,6 +60,8 @@ uv run python -m plc_reader
 
 - `PyXgtClient` applies a read timeout to its underlying TCP socket and closes
   that socket before reconnecting.
+- The default `per_cycle` connection mode closes a healthy socket after every
+  complete scan, avoiding PLC idle-session timeouts between scan intervals.
 - A reset or timeout stops the current cycle immediately and writes one summary
   record instead of one record per remaining tag.
 - Retained values from a failed cycle are never uploaded as fresh telemetry.

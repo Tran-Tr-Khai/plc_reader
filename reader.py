@@ -141,12 +141,15 @@ class PlcReader:
                     samples,
                 )
 
-        return self._snapshot(
+        snapshot = self._snapshot(
             timestamp,
             connected=successful_reads > 0,
             successful_reads=successful_reads,
             failed_reads=failed_reads,
         )
+        if self.settings.plc_connection_mode == "per_cycle":
+            self._close_client()
+        return snapshot
 
     def close(self) -> None:
         self._close_client()

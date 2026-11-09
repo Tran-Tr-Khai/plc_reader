@@ -55,6 +55,14 @@ def _optional_text(raw: Any) -> str | None:
     return value or None
 
 
+def _choice(name: str, raw: Any, default: str, choices: set[str]) -> str:
+    value = _text(name, raw, default).lower()
+    if value not in choices:
+        allowed = ", ".join(sorted(choices))
+        raise ValueError(f"{name} must be one of: {allowed}")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     plc_ip: str = "100.100.100.1"
@@ -64,6 +72,7 @@ class Settings:
     read_interval_seconds: float = 15.0
     reconnect_interval_seconds: float = 30.0
     plc_socket_timeout_seconds: float = 5.0
+    plc_connection_mode: str = "per_cycle"
     upload_url: str | None = None
     batch_url: str | None = None
     upload_token: str | None = None
@@ -116,6 +125,12 @@ class Settings:
                 "plc_socket_timeout_seconds",
                 raw_config.get("plc_socket_timeout_seconds"),
                 defaults.plc_socket_timeout_seconds,
+            ),
+            plc_connection_mode=_choice(
+                "plc_connection_mode",
+                raw_config.get("plc_connection_mode"),
+                defaults.plc_connection_mode,
+                {"per_cycle", "persistent"},
             ),
             upload_url=_optional_text(raw_config.get("upload_url")),
             batch_url=_optional_text(raw_config.get("batch_url")),
