@@ -51,10 +51,20 @@ uv run python -m plc_reader
 6. Each tag is read as `word` or `dword` according to `DWORD_TAGS`.
 7. Successful values are retained; failed tags are recorded in `errors` and previous values are marked stale locally.
 8. `ReadSnapshot` records the timestamp, connection state, values, and read counters.
-9. `main.py` prints the snapshot and passes `snapshot.payload()` to `HttpPublisher`.
+9. `main.py` uploads only a complete snapshot to `HttpPublisher`.
 10. `publisher.py` flushes older outbox records first, then sends the current payload.
 11. Failed HTTP uploads are appended to `data/plc-outbox.jsonl` and retried on the next cycle.
 12. The loop waits for `read_interval_seconds` when connected, or `reconnect_interval_seconds` after failure.
+
+## Reliability and logging
+
+- `PyXgtClient` applies a read timeout to its underlying TCP socket and closes
+  that socket before reconnecting.
+- A reset or timeout stops the current cycle immediately and writes one summary
+  record instead of one record per remaining tag.
+- Retained values from a failed cycle are never uploaded as fresh telemetry.
+- Python owns logging through a UTF-8 rotating file handler. `log_max_bytes`
+  and `log_backup_count` bound disk usage.
 
 ## Data shapes
 
@@ -92,7 +102,7 @@ Current API payload:
 - Run from the project directory or use stable absolute paths for the outbox.
 - Use the real PLC reader in production; fake PLC testing belongs under `tools/`.
 - Keep upload tokens outside tracked YAML files.
-- Keep logs on stdout/stderr; let systemd or Docker collect and rotate them.
+- Use the configured UTF-8 rotating application log on Windows deployments.
 - The PyXGT adapter must normalize a single register response to a scalar `123`, not `[123]`.
 - A failed tag must not be replaced with zero; it is either absent or retained as stale locally.
 

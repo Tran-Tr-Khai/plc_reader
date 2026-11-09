@@ -32,6 +32,13 @@ def _non_negative_float(name: str, raw: Any, default: float) -> float:
     return value
 
 
+def _positive_float(name: str, raw: Any, default: float) -> float:
+    value = _non_negative_float(name, raw, default)
+    if value <= 0:
+        raise ValueError(f"{name} must be greater than zero")
+    return value
+
+
 def _text(name: str, raw: Any, default: str) -> str:
     if raw is None:
         return default
@@ -56,13 +63,17 @@ class Settings:
     machine_id: str = "Tenter 1"
     read_interval_seconds: float = 15.0
     reconnect_interval_seconds: float = 30.0
+    plc_socket_timeout_seconds: float = 5.0
     upload_url: str | None = None
     batch_url: str | None = None
     upload_token: str | None = None
     upload_timeout_seconds: float = 5.0
     batch_size: int = 100
     max_outbox_bytes: int = 500 * 1024 * 1024
-    outbox_path: Path = Path("plc_reader/data/plc-outbox.jsonl")
+    outbox_path: Path = Path("data/plc-outbox.jsonl")
+    log_path: Path = Path("logs/plc_reader.log")
+    log_max_bytes: int = 5 * 1024 * 1024
+    log_backup_count: int = 5
     log_level: str = "INFO"
 
     @classmethod
@@ -78,6 +89,10 @@ class Settings:
         if not isinstance(raw_config, Mapping):
             raise TypeError("PLC config root must be a YAML mapping")
 
+        def relative_to_config(raw_path: str) -> Path:
+            candidate = Path(raw_path)
+            return candidate if candidate.is_absolute() else path.parent / candidate
+
         return cls(
             plc_ip=_text("plc_ip", raw_config.get("plc_ip"), defaults.plc_ip),
             plc_port=_positive_int(
@@ -87,15 +102,20 @@ class Settings:
             machine_id=_text(
                 "machine_id", raw_config.get("machine_id"), defaults.machine_id
             ),
-            read_interval_seconds=_non_negative_float(
+            read_interval_seconds=_positive_float(
                 "read_interval_seconds",
                 raw_config.get("read_interval_seconds"),
                 defaults.read_interval_seconds,
             ),
-            reconnect_interval_seconds=_non_negative_float(
+            reconnect_interval_seconds=_positive_float(
                 "reconnect_interval_seconds",
                 raw_config.get("reconnect_interval_seconds"),
                 defaults.reconnect_interval_seconds,
+            ),
+            plc_socket_timeout_seconds=_positive_float(
+                "plc_socket_timeout_seconds",
+                raw_config.get("plc_socket_timeout_seconds"),
+                defaults.plc_socket_timeout_seconds,
             ),
             upload_url=_optional_text(raw_config.get("upload_url")),
             batch_url=_optional_text(raw_config.get("batch_url")),
@@ -113,12 +133,29 @@ class Settings:
                 raw_config.get("max_outbox_bytes"),
                 defaults.max_outbox_bytes,
             ),
-            outbox_path=Path(
+            outbox_path=relative_to_config(
                 _text(
                     "outbox_path",
                     raw_config.get("outbox_path"),
                     str(defaults.outbox_path),
                 )
+            ),
+            log_path=relative_to_config(
+                _text(
+                    "log_path",
+                    raw_config.get("log_path"),
+                    str(defaults.log_path),
+                )
+            ),
+            log_max_bytes=_positive_int(
+                "log_max_bytes",
+                raw_config.get("log_max_bytes"),
+                defaults.log_max_bytes,
+            ),
+            log_backup_count=_positive_int(
+                "log_backup_count",
+                raw_config.get("log_backup_count"),
+                defaults.log_backup_count,
             ),
             log_level=_text(
                 "log_level", raw_config.get("log_level"), defaults.log_level

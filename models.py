@@ -13,6 +13,11 @@ class ReadSnapshot:
     successful_reads: int
     failed_reads: int
 
+    @property
+    def is_complete(self) -> bool:
+        """True only when every configured tag was read in this cycle."""
+        return self.connected and self.failed_reads == 0
+
     def payload(self) -> dict[str, Any]:
         return {
             "machine_id": self.machine_id,

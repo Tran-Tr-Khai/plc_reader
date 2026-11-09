@@ -31,6 +31,7 @@ class HttpPublisher:
         self.outbox_path = outbox_path
         self.batch_size = batch_size
         self.max_outbox_bytes = max_outbox_bytes
+        self._delivery_failed = False
 
     @property
     def enabled(self) -> bool:
@@ -45,7 +46,13 @@ class HttpPublisher:
             self._send(payload)
         except (HTTPError, URLError, OSError, ValueError) as exc:
             self._append(payload)
-            logger.warning("PLC upload failed; payload queued locally: %s", exc)
+            if not self._delivery_failed:
+                logger.warning("PLC upload failed; payloads are queued locally: %s", exc)
+            self._delivery_failed = True
+        else:
+            if self._delivery_failed:
+                logger.info("PLC upload recovered; queued payloads will be retried")
+            self._delivery_failed = False
 
     def _send(self, payload: dict[str, Any]) -> None:
         self._post(self.url, payload)
@@ -83,7 +90,7 @@ class HttpPublisher:
                 self._send_batch(payloads)
                 index += len(batch_lines)
             except (HTTPError, URLError, OSError, ValueError) as exc:
-                logger.warning("PLC outbox flush paused: %s", exc)
+                logger.debug("PLC outbox flush paused: %s", exc)
                 break
 
         self._rewrite_outbox(lines[index:])

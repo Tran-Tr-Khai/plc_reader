@@ -18,6 +18,10 @@ class PyXgtClient:
 
         self._connection = plc_ls(settings.plc_ip, settings.plc_port)
         self._plc_type = settings.plc_type
+        socket_connection = getattr(self._connection, "conn_class", None)
+        settimeout = getattr(socket_connection, "settimeout", None)
+        if callable(settimeout):
+            settimeout(settings.plc_socket_timeout_seconds)
 
     def read(self, address: str, data_type: str) -> Any:
         result = self._connection.command(
@@ -31,7 +35,12 @@ class PyXgtClient:
         return result[0]
 
     def close(self) -> None:
-        close = getattr(self._connection, "close", None)
+        # PyXGT stores the actual TCP socket as ``conn_class`` and its
+        # plc_ls wrapper does not expose ``close()`` in the installed version.
+        socket_connection = getattr(self._connection, "conn_class", None)
+        close = getattr(socket_connection, "close", None)
+        if not callable(close):
+            close = getattr(self._connection, "close", None)
         if callable(close):
             close()
 
@@ -72,6 +81,7 @@ class PlcReader:
 
         successful_reads = 0
         failed_reads = 0
+        error_samples: list[str] = []
 
         for group_name, address_map in self.groups.items():
             for tag_name, address in address_map.items():
@@ -80,26 +90,56 @@ class PlcReader:
                 try:
                     value = self._client.read(address, data_type)
                 except Exception as exc:  # noqa: BLE001 - PyXGT exposes varied errors.
+                    if self._is_connection_error(exc):
+                        self._errors.clear()
+                        self._errors["connection"] = str(exc)
+                        failed_reads = total_reads - successful_reads
+                        logger.error(
+                            "PLC connection interrupted; stopped current cycle | "
+                            "group=%s | tag=%s | address=%s | error=%s",
+                            group_name,
+                            tag_name,
+                            address,
+                            exc,
+                        )
+                        self._close_client()
+                        return self._snapshot(
+                            timestamp,
+                            connected=False,
+                            successful_reads=successful_reads,
+                            failed_reads=failed_reads,
+                        )
+
                     self._errors[key] = str(exc)
                     failed_reads += 1
-                    logger.error(
-                        "PLC read failed | group=%s | tag=%s | address=%s | "
-                        "type=%s | error=%s",
-                        group_name,
-                        tag_name,
-                        address,
-                        data_type,
-                        exc,
-                    )
+                    if len(error_samples) < 3:
+                        error_samples.append(
+                            f"{group_name}.{tag_name} ({address}): {exc}"
+                        )
                     continue
 
                 self._values[group_name][tag_name] = value
                 self._errors.pop(key, None)
                 successful_reads += 1
 
-        if failed_reads and successful_reads == 0:
-            logger.error("All PLC reads failed; reconnecting on the next cycle")
-            self._close_client()
+        if failed_reads:
+            samples = "; ".join(error_samples)
+            if successful_reads == 0:
+                logger.error(
+                    "PLC cycle failed; reconnecting on the next cycle | "
+                    "failed=%s | examples=%s",
+                    failed_reads,
+                    samples,
+                )
+                self._close_client()
+            else:
+                logger.warning(
+                    "PLC cycle completed with read errors | successful=%s | "
+                    "failed=%s | examples=%s",
+                    successful_reads,
+                    failed_reads,
+                    samples,
+                )
 
         return self._snapshot(
             timestamp,
@@ -110,6 +150,17 @@ class PlcReader:
 
     def close(self) -> None:
         self._close_client()
+
+    @staticmethod
+    def _is_connection_error(exc: Exception) -> bool:
+        """Return true for socket failures that invalidate the current client."""
+        if isinstance(exc, (ConnectionError, TimeoutError)):
+            return True
+        return isinstance(exc, OSError) and getattr(exc, "winerror", None) in {
+            10053,  # Software caused connection abort.
+            10054,  # Connection reset by peer.
+            10060,  # Connection timed out.
+        }
 
     def _connect(self) -> bool:
         try:
