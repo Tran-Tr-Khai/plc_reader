@@ -5,7 +5,7 @@ from typing import Any
 
 from .config import Settings
 from .models import ReadSnapshot
-from .tags import ADDRESS_GROUPS, DWORD_TAGS
+from .tags import ADDRESS_GROUPS, DWORD_TAGS, SCALE_DIVISORS
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,16 @@ class PlcReader:
         }
         self._errors: dict[str, str] = {}
 
+    @staticmethod
+    def _to_engineering_value(tag_name: str, value: Any) -> Any:
+        """Convert PLC register values that use a fixed decimal scale."""
+        divisor = SCALE_DIVISORS.get(tag_name)
+        if divisor is None:
+            return value
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise ValueError(f"Expected a numeric value for scaled tag {tag_name!r}")
+        return value / divisor
+
     def read_once(self) -> ReadSnapshot:
         timestamp = datetime.now(timezone.utc)
         total_reads = sum(len(group) for group in self.groups.values())
@@ -89,6 +99,7 @@ class PlcReader:
                 data_type = "dword" if tag_name in self.dword_tags else "word"
                 try:
                     value = self._client.read(address, data_type)
+                    value = self._to_engineering_value(tag_name, value)
                 except Exception as exc:  # noqa: BLE001 - PyXGT exposes varied errors.
                     if self._is_connection_error(exc):
                         self._errors.clear()

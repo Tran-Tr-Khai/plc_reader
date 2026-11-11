@@ -4,6 +4,15 @@ DWORD_TAGS = {
     "Counter Total",
 }
 
+# These PLC registers store tenths of their display unit.  Convert them at the
+# reader boundary so every API consumer receives the engineering value.
+SCALE_DIVISORS = {
+    "Tốc độ": 10,
+    "Counter A": 10,
+    "Counter B": 10,
+    "Counter Total": 10,
+}
+
 
 ADDRESS_GROUPS = {
     "speed_and_width": {
